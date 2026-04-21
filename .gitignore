@@ -1,0 +1,14 @@
+.env
+.venv/
+CLAUDE.md
+__pycache__/
+*.pyc
+outputs/
+p53/
+*.pdf
+*.fasta
+*_sequences.csv
+*_sequences.json
+*_seq_map.csv
+*_seq_map.json
+*_candidates.csv
