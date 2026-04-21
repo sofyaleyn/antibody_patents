@@ -13,7 +13,7 @@ p53/
 *_seq_map.json
 *_candidates.csv
 *.log
-./Patent_script_description.docx
-./PLAN.md
+Patent_script_description.docx
+PLAN.md
 .claude/
-./AbPatentsDB/
+AbPatentsDB/
