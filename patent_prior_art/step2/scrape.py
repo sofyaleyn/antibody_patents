@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
 
 log = logging.getLogger(__name__)
+
 
 LENS_SEARCH_URL   = "https://www.lens.org/lens/search/patent/list?q={patent_number}"
 LENS_PATENT_URL   = "https://www.lens.org/lens/patent/{lens_id}"
@@ -28,12 +31,20 @@ def resolve_lens_id(page, patent_number: str) -> tuple[str, str]:
     page.goto(search_url, timeout=NAV_TIMEOUT)
 
     try:
+        page.wait_for_load_state("networkidle", timeout=NAV_TIMEOUT)
+    except Exception:
+        pass  # proceed and check for results anyway
+
+    try:
         page.wait_for_selector("a[href*='/lens/patent/']", timeout=WAIT_TIMEOUT)
     except Exception:
-        raise RuntimeError(
-            f"No patent results found on lens.org for '{patent_number}'. "
-            "Check the patent number format (e.g. US20220056133A1, WO2020139171)."
-        )
+        # One retry after an extra wait — lens.org can be slow to hydrate
+        time.sleep(3)
+        if not page.query_selector("a[href*='/lens/patent/']"):
+            raise RuntimeError(
+                f"No patent results found on lens.org for '{patent_number}'. "
+                "Check the patent number format (e.g. US20220056133A1, WO2020139171)."
+            )
 
     time.sleep(REQUEST_DELAY)
 

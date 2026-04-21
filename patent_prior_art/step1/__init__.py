@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import os
@@ -24,9 +26,8 @@ def run_step1(
     output_dir: str | Path = ".",
     known_patents: list[str] | None = None,
     min_confidence: float = 0.7,
-    use_thinking: bool = False,
-    thinking_budget: int = 8000,
     revalidate: bool = False,
+    max_candidates: int | None = None,
 ) -> list[dict]:
     """
     Full Step 1 pipeline.
@@ -36,9 +37,8 @@ def run_step1(
         output_dir:      Where to write CSVs
         known_patents:   If provided, skip search and validate these directly
         min_confidence:  Minimum confidence to include in validated output
-        use_thinking:    Use extended thinking for validation (slower, more thorough)
-        thinking_budget: Token budget for thinking
         revalidate:      If True, load existing candidates CSV and rerun validation only
+        max_candidates:  Cap number of patents sent to Phase C (useful for testing)
 
     Returns:
         List of validated patent dicts (validates=True, confidence >= min_confidence)
@@ -73,13 +73,15 @@ def run_step1(
         log.error("No candidates to validate")
         return []
 
+    if max_candidates is not None and len(candidates) > max_candidates:
+        log.info(f"--max-candidates {max_candidates}: trimming from {len(candidates)}")
+        candidates = candidates[:max_candidates]
+
     # ── Phase C: Validate ─────────────────────────────────────────────────────
     results = validate_all(
         client=client,
         candidates=candidates,
         target=target,
-        use_thinking=use_thinking,
-        thinking_budget=thinking_budget,
     )
 
     save_csv(results, candidates_path)
@@ -119,13 +121,9 @@ def _parse_args() -> argparse.Namespace:
              "Use after manually inspecting/editing the candidates CSV."
     )
     parser.add_argument(
-        "--thinking", action="store_true",
-        help="Use extended thinking for validation (slower, more thorough). "
-             "Recommended when revalidating marginal cases."
-    )
-    parser.add_argument(
-        "--thinking-budget", type=int, default=8000,
-        help="Token budget for extended thinking (default: 8000)"
+        "--max-candidates", type=int, default=None,
+        help="Cap number of patents sent to Phase C validation. "
+             "Useful for testing without validating a large candidate list."
     )
     parser.add_argument(
         "--min-confidence", type=float, default=0.7,
@@ -150,9 +148,8 @@ def main() -> None:
         output_dir=args.output_dir,
         known_patents=known,
         min_confidence=args.min_confidence,
-        use_thinking=args.thinking,
-        thinking_budget=args.thinking_budget,
         revalidate=args.revalidate,
+        max_candidates=args.max_candidates,
     )
 
     sys.exit(0 if validated else 1)

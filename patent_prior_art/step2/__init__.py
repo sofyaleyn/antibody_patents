@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import csv
 import logging
@@ -42,7 +44,10 @@ def run_step2(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=headless)
+        try:
+            browser = pw.chromium.launch(headless=headless, channel="chrome")
+        except Exception:
+            browser = pw.chromium.launch(headless=headless)
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -51,6 +56,7 @@ def run_step2(
             ),
             accept_downloads=True,
         )
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         page = context.new_page()
 
         try:

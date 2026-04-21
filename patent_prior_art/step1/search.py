@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
@@ -94,8 +96,10 @@ def _run_tool_loop(
     client: anthropic.Anthropic,
     messages: list[dict],
     tools: list[dict],
-    system: str = "",
-    max_iterations: int = 20,
+    system: str | list = "",
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 8096,
+    max_iterations: int = 30,
 ) -> str:
     """
     Run Claude in a tool-use loop until stop_reason == "end_turn".
@@ -105,8 +109,8 @@ def _run_tool_loop(
     No manual tool_result construction needed.
     """
     kwargs = dict(
-        model="claude-sonnet-4-6",
-        max_tokens=8096,
+        model=model,
+        max_tokens=max_tokens,
         tools=tools,
         messages=messages,
     )
@@ -114,6 +118,7 @@ def _run_tool_loop(
         kwargs["system"] = system
 
     rl_count = 0
+    last_text = ""
     for iteration in range(max_iterations):
         try:
             response = client.messages.create(**kwargs)
@@ -137,13 +142,17 @@ def _run_tool_loop(
             f"blocks={[b.type for b in response.content]}"
         )
 
-        if response.stop_reason == "end_turn":
-            return " ".join(
-                block.text for block in response.content
-                if block.type == "text"
-            )
+        candidate_text = " ".join(
+            block.text for block in response.content
+            if block.type == "text"
+        )
+        if candidate_text:
+            last_text = candidate_text
 
-        if response.stop_reason == "tool_use":
+        if response.stop_reason == "end_turn":
+            return last_text
+
+        if response.stop_reason in ("tool_use", "pause_turn"):
             kwargs["messages"] = kwargs["messages"] + [
                 {"role": "assistant", "content": response.content}
             ]
@@ -153,7 +162,7 @@ def _run_tool_loop(
         break
 
     log.warning("Tool loop reached max iterations without end_turn")
-    return ""
+    return last_text
 
 
 def filter_us_patents(candidates: list[dict]) -> list[dict]:
