@@ -12,3 +12,4 @@ p53/
 *_seq_map.csv
 *_seq_map.json
 *_candidates.csv
+*.log
