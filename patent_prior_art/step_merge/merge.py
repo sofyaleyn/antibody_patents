@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Merge AbPatentDB sequences with Google Patents seq_map annotations.
 
 For each patent, reads two sources:
@@ -10,35 +9,13 @@ Join strategy:
      find matching AbPatentDB sequence by location (VH/VL).
      Fill if exactly 1 match; note ambiguity if multiple.
   2. AbPatentDB rows not matched to any GP entry → appended with abpatentdb_only annotation.
-
-Usage:
-    # Batch: merge all patents found in sequences-dir that also have seq_map in seq-map-dir
-    python step_merge.py \\
-        --sequences-dir outputs/abpatentdb_tp53/ \\
-        --seq-map-dir   outputs/google_patents_tp53/ \\
-        --output-dir    outputs/merged_tp53/
-
-    # Single patent with explicit file paths
-    python step_merge.py \\
-        --patent US20220056133A1 \\
-        --sequences-csv outputs/abpatentdb/US20220056133A1_sequences.csv \\
-        --seq-map-csv   outputs/google_patents/US20220056133A1_seq_map.csv \\
-        --output-dir    outputs/merged/
 """
-
 from __future__ import annotations
 
-import argparse
 import csv
 import logging
-import sys
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
 log = logging.getLogger(__name__)
 
 _MERGED_FIELDNAMES = [
@@ -55,7 +32,6 @@ _GP_REGION_TO_AB_LOCATIONS: dict[str, set[str]] = {
     "VH": {"VH"},
     "VL": {"VL", "VK"},
     "VK": {"VL", "VK"},
-    # CDR regions and nucleic_acid are not in AbPatentDB — no full-sequence match possible
 }
 
 
@@ -95,7 +71,6 @@ def merge_patent(
         log.warning(f"{patent_number}: both sources empty, skipping")
         return []
 
-    # Index AbPatentDB rows by location for O(1) lookup
     ab_by_location: dict[str, list[tuple[int, dict]]] = {}
     for i, r in enumerate(ab_rows):
         loc = (r.get("location") or "").upper()
@@ -142,7 +117,6 @@ def merge_patent(
 
         merged.append(row)
 
-    # Append AbPatentDB rows not claimed by any GP seq_map entry
     for i, ab in enumerate(ab_rows):
         if i in matched_ab:
             continue
@@ -182,11 +156,11 @@ def merge_patent(
     return merged
 
 
-def _find_patent_pairs(
+def find_patent_pairs(
     sequences_dir: Path,
     seq_map_dir: Path,
 ) -> list[tuple[str, Path | None, Path | None]]:
-    """Find all patents that have at least one source file in either directory."""
+    """Find all patents with at least one source file in either directory."""
     patents: dict[str, dict[str, Path]] = {}
 
     for p in sequences_dir.glob("*_sequences.csv"):
@@ -201,62 +175,3 @@ def _find_patent_pairs(
         (pn, files.get("sequences"), files.get("seq_map"))
         for pn, files in sorted(patents.items())
     ]
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Merge AbPatentDB sequences with Google Patents seq_map annotations."
-    )
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--patent", metavar="PATENT_NUMBER",
-                      help="Single patent number (use with --sequences-csv / --seq-map-csv)")
-    mode.add_argument("--sequences-dir", metavar="DIR", type=Path,
-                      help="Directory of *_sequences.csv files (AbPatentDB output)")
-
-    parser.add_argument("--seq-map-dir", metavar="DIR", type=Path,
-                        help="Directory of *_seq_map.csv files (Google Patents output); "
-                             "required in batch mode, optional in single-patent mode")
-    parser.add_argument("--sequences-csv", metavar="FILE", type=Path,
-                        help="Explicit sequences CSV (single-patent mode)")
-    parser.add_argument("--seq-map-csv", metavar="FILE", type=Path,
-                        help="Explicit seq_map CSV (single-patent mode)")
-    parser.add_argument("--output-dir", default=".", type=Path,
-                        help="Output directory (default: current directory)")
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = _parse_args()
-
-    if args.patent:
-        merge_patent(
-            patent_number=args.patent,
-            sequences_csv=args.sequences_csv,
-            seq_map_csv=args.seq_map_csv,
-            output_dir=args.output_dir,
-        )
-    else:
-        if not args.seq_map_dir:
-            print("error: --seq-map-dir is required in batch mode", file=sys.stderr)
-            sys.exit(1)
-
-        pairs = _find_patent_pairs(args.sequences_dir, args.seq_map_dir)
-        if not pairs:
-            log.warning("No matching patent files found.")
-            sys.exit(1)
-
-        log.info(f"Found {len(pairs)} patents to merge")
-        errors = 0
-        for patent_number, seq_csv, map_csv in pairs:
-            try:
-                merge_patent(patent_number, seq_csv, map_csv, args.output_dir)
-            except Exception as e:
-                log.error(f"{patent_number}: {e}")
-                errors += 1
-
-        if errors:
-            sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,18 +1,8 @@
-#!/usr/bin/env python3
 """End-to-end pipeline: AbPatentDB discovery → Google Patents annotations → merge.
 
 Given a target gene/protein name, runs all three steps and writes outputs to
 {output-dir}/abdb/, {output-dir}/gp/, and {output-dir}/merged/.
-
-Usage:
-    python run_pipeline.py --target TP53 --db-path ./AbPatentsDB/ \\
-        --output-dir ./outputs/tp53_full/
-
-    # Limit how many patents go through the (paid) Google Patents step
-    python run_pipeline.py --target PDCD1 --db-path ./AbPatentsDB/ \\
-        --output-dir ./outputs/pdcd1/ --max-patents 20
 """
-
 from __future__ import annotations
 
 import argparse
@@ -24,9 +14,15 @@ from dotenv import load_dotenv
 import anthropic
 
 from patent_prior_art.step_abpatentdb import run_abpatentdb
-from patent_prior_art.step_google_patents import fetch_html, extract_seq_map, write_seq_map
-
-from step_merge import merge_patent, _find_patent_pairs
+from patent_prior_art.step_google_patents import (
+    fetch_html,
+    extract_seq_map,
+    write_seq_map,
+    fetch_seqlist,
+    parse_seqlist,
+    write_sequences,
+)
+from patent_prior_art.step_merge import merge_patent, find_patent_pairs
 
 load_dotenv()
 logging.basicConfig(
@@ -47,7 +43,6 @@ def run_pipeline(
     gp_dir     = output_dir / "gp"
     merged_dir = output_dir / "merged"
 
-    # --- Step 1: AbPatentDB ---
     log.info(f"=== AbPatentDB: searching for {target!r} ===")
     rows, abdb_stats = run_abpatentdb(
         target=target,
@@ -63,10 +58,10 @@ def run_pipeline(
     patents = sorted({r["patent_number"] for r in rows if r.get("patent_number")})[:max_patents]
     log.info(f"Will run Google Patents on {len(patents)} patents")
 
-    # --- Step 2: Google Patents per patent ---
     client = anthropic.Anthropic()
     gp_success = 0
     gp_errors  = 0
+    seqlist_filled = 0
     for patent in patents:
         try:
             log.info(f"--- Google Patents: {patent} ---")
@@ -74,15 +69,29 @@ def run_pipeline(
             seq_map = extract_seq_map(client, html, patent)
             write_seq_map(seq_map, patent, gp_dir)
             gp_success += 1
+
+            if not (abdb_dir / f"{patent}_sequences.csv").exists():
+                try:
+                    got = fetch_seqlist(html)
+                    if got:
+                        url, content = got
+                        records = parse_seqlist(content, url, patent)
+                        if records:
+                            write_sequences(records, patent, abdb_dir)
+                            seqlist_filled += 1
+                except Exception as e:
+                    log.warning(f"Sequence listing fetch failed for {patent}: {e}")
         except Exception as e:
             log.error(f"GP failed for {patent}: {e}")
             gp_errors += 1
 
-    log.info(f"Google Patents: {gp_success}/{len(patents)} succeeded, {gp_errors} errors")
+    log.info(
+        f"Google Patents: {gp_success}/{len(patents)} succeeded, {gp_errors} errors. "
+        f"Sequence listings filled in {seqlist_filled} patents not covered by AbPatentDB."
+    )
 
-    # --- Step 3: Merge ---
     log.info("=== Merge ===")
-    pairs = _find_patent_pairs(abdb_dir, gp_dir)
+    pairs = find_patent_pairs(abdb_dir, gp_dir)
     merge_success = 0
     merge_errors  = 0
     for pn, seq_csv, map_csv in pairs:
@@ -102,12 +111,13 @@ def run_pipeline(
     )
 
     return {
-        "abdb_patents":        abdb_stats["total_patents"],
-        "abdb_sequences":      abdb_stats["total_sequences"],
-        "gp_success":          gp_success,
-        "gp_errors":           gp_errors,
-        "merged":              merge_success,
-        "merge_errors":        merge_errors,
+        "abdb_patents":   abdb_stats["total_patents"],
+        "abdb_sequences": abdb_stats["total_sequences"],
+        "gp_success":     gp_success,
+        "gp_errors":      gp_errors,
+        "seqlist_filled": seqlist_filled,
+        "merged":         merge_success,
+        "merge_errors":   merge_errors,
     }
 
 

@@ -7,6 +7,8 @@ import time
 
 import anthropic
 
+from .throttle import call_with_throttle
+
 log = logging.getLogger(__name__)
 
 MODEL = "claude-sonnet-4-6"
@@ -117,10 +119,15 @@ def extract_seq_map(
         }
     ]
 
+    # Rough token estimate: ~4 chars/token for English text + JSON
+    est_tokens = max(1000, len(patent_text) // 4 + 500)
+
     for attempt in range(1, 3):
-        log.info(f"Calling {model}, attempt {attempt}/2")
+        log.info(f"Calling {model}, attempt {attempt}/2 (~{est_tokens:,} input tokens)")
         try:
-            response = client.messages.create(
+            response = call_with_throttle(
+                client,
+                estimated_input_tokens=est_tokens,
                 model=model,
                 max_tokens=4096,
                 system=SYSTEM_PROMPT,

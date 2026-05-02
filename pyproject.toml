@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patent-prior-art"
+version = "0.1.0"
+description = "Find antibody patents for a target antigen, retrieve sequences, and extract SEQ ID role mappings."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic",
+    "requests",
+    "duckdb",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+playwright = ["playwright"]
+
+[project.scripts]
+patent-search   = "patent_prior_art.step1_search:main"
+patent-abdb     = "patent_prior_art.step_abpatentdb:main"
+patent-gp       = "patent_prior_art.step_google_patents:main"
+patent-seqlist  = "patent_prior_art.step_google_patents:seqlist_main"
+patent-pdf      = "patent_prior_art.step_pdf_fallback:main"
+patent-merge    = "patent_prior_art.step_merge:main"
+patent-pipeline = "patent_prior_art.pipeline:main"
+patent-download = "patent_prior_art.download:main"
+
+[tool.setuptools.packages.find]
+include = ["patent_prior_art*"]

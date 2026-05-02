@@ -1,9 +1,11 @@
+CLAUDE.md
 .env
 .venv/
-CLAUDE.md
 __pycache__/
 *.pyc
+.DS_Store
 outputs/
+downloads/
 p53/
 *.pdf
 *.fasta
@@ -13,7 +15,7 @@ p53/
 *_seq_map.json
 *_candidates.csv
 *.log
-Patent_script_description.docx
-PLAN.md
 .claude/
+*.egg-info/
 AbPatentsDB/
+docs/Patent_script_description.docx

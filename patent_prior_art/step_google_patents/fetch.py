@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 log = logging.getLogger(__name__)
@@ -9,9 +10,26 @@ GOOGLE_PATENTS_URL = "https://patents.google.com/patent/{patent_number}/en"
 REQUEST_TIMEOUT = 20
 NAV_TIMEOUT = 30_000
 
+# Legacy USPTO grants like "US08039594B2" are stored with a zero-padded numeric
+# portion in some sources, but Google Patents serves them at the un-padded URL
+# ("US8039594B2"). Strip leading zeros from the digits between the country code
+# and the kind code.
+_US_GRANT_RE = re.compile(r"^(US)0+(\d+)([A-Z]\d?)$")
+
+
+def normalize_patent_number(patent_number: str) -> str:
+    m = _US_GRANT_RE.match(patent_number)
+    if m:
+        normalized = f"{m.group(1)}{m.group(2)}{m.group(3)}"
+        if normalized != patent_number:
+            log.info(f"Normalized {patent_number} → {normalized} for Google Patents URL")
+        return normalized
+    return patent_number
+
 
 def fetch_html(patent_number: str, no_headless: bool = False) -> str:
     """Return full HTML for a Google Patents page, trying requests first."""
+    patent_number = normalize_patent_number(patent_number)
     url = GOOGLE_PATENTS_URL.format(patent_number=patent_number)
     log.info(f"Fetching {url}")
 
