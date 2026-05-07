@@ -41,7 +41,8 @@ def _write_fasta(rows: list[dict], path: Path) -> None:
             seq = (r.get("sequence") or "").strip()
             if not seq:
                 continue
-            header = f"{r['patent_number']}|{r['seq_id']}|{r.get('region', '?')}|{r.get('chain', '?')}"
+            src = r.get("sequence_source") or "unknown"
+            header = f"{r['patent_number']}|{r['seq_id']}|{r.get('region', '?')}|{r.get('chain', '?')}|{src}"
             wrapped = "\n".join(seq[i:i + 60] for i in range(0, len(seq), 60))
             f.write(f">{header}\n{wrapped}\n")
 

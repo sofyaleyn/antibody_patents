@@ -23,6 +23,7 @@ from patent_prior_art.step_google_patents import (
     write_sequences,
 )
 from patent_prior_art.step_merge import merge_patent, find_patent_pairs
+from patent_prior_art.step_pdf_fallback import run_step_pdf_fallback
 
 load_dotenv()
 logging.basicConfig(
@@ -62,6 +63,7 @@ def run_pipeline(
     gp_success = 0
     gp_errors  = 0
     seqlist_filled = 0
+    pdf_filled = 0
     for patent in patents:
         try:
             log.info(f"--- Google Patents: {patent} ---")
@@ -81,13 +83,21 @@ def run_pipeline(
                             seqlist_filled += 1
                 except Exception as e:
                     log.warning(f"Sequence listing fetch failed for {patent}: {e}")
+
+                if not (abdb_dir / f"{patent}_sequences.csv").exists():
+                    try:
+                        seqs = run_step_pdf_fallback(patent, abdb_dir, client=client)
+                        if seqs:
+                            pdf_filled += 1
+                    except Exception as e:
+                        log.warning(f"PDF fallback failed for {patent}: {e}")
         except Exception as e:
             log.error(f"GP failed for {patent}: {e}")
             gp_errors += 1
 
     log.info(
         f"Google Patents: {gp_success}/{len(patents)} succeeded, {gp_errors} errors. "
-        f"Sequence listings filled in {seqlist_filled} patents not covered by AbPatentDB."
+        f"SeqList filled {seqlist_filled}, PDF fallback filled {pdf_filled} patents not covered by AbPatentDB."
     )
 
     log.info("=== Merge ===")
@@ -116,6 +126,7 @@ def run_pipeline(
         "gp_success":     gp_success,
         "gp_errors":      gp_errors,
         "seqlist_filled": seqlist_filled,
+        "pdf_filled":     pdf_filled,
         "merged":         merge_success,
         "merge_errors":   merge_errors,
     }
